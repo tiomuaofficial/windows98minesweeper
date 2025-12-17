@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Windows 98 Minesweeper</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #008080;
+    font-family: Tahoma, Verdana, sans-serif;
+  }
+
+  header {
+    background: #c0c0c0;
+    border-top: 2px solid #fff;
+    border-bottom: 2px solid #000;
+    padding: 6px;
+    font-size: 14px;
+  }
+
+  main {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+  }
+
+  .window {
+    background: #c0c0c0;
+    border: 2px solid #000;
+    border-top-color: #fff;
+    border-left-color: #fff;
+    padding: 6px;
+  }
+
+  .titlebar {
+    background: linear-gradient(to right, #000080, #1084d0);
+    color: white;
+    padding: 4px 6px;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .controls {
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  select, button {
+    font-family: inherit;
+    font-size: 12px;
+    background: #c0c0c0;
+    border: 2px solid #000;
+    border-top-color: #fff;
+    border-left-color: #fff;
+    padding: 2px 6px;
+    margin-right: 4px;
+    cursor: pointer;
+  }
+
+  select:active, button:active {
+    border-top-color: #000;
+    border-left-color: #000;
+    border-bottom-color: #fff;
+    border-right-color: #fff;
+  }
+
+  #game {
+    display: grid;
+    background: #808080;
+    border: 2px solid #000;
+    border-top-color: #404040;
+    border-left-color: #404040;
+    padding: 4px;
+  }
+
+  .cell {
+    width: 24px;
+    height: 24px;
+    background: #c0c0c0;
+    border: 2px solid #000;
+    border-top-color: #fff;
+    border-left-color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 20px;
+    text-align: center;
+    user-select: none;
+    cursor: pointer;
+  }
+
+  .revealed {
+    background: #bdbdbd;
+    border: 1px solid #808080;
+    cursor: default;
+  }
+
+  .bomb {
+    background: red;
+  }
+
+  .flag {
+    color: red;
+  }
+
+  .n1 { color: blue; }
+  .n2 { color: green; }
+  .n3 { color: red; }
+  .n4 { color: navy; }
+  .n5 { color: maroon; }
+  .n6 { color: teal; }
+</style>
+</head>
+
+<body>
+
+<header>Windows 98 Minesweeper</header>
+
+<main>
+  <div class="window">
+    <div class="titlebar">Minesweeper</div>
+
+    <div class="controls">
+      Size:
+      <select id="size">
+        <option value="8">Small</option>
+        <option value="12">Medium</option>
+        <option value="20">Massive</option>
+      </select>
+
+      Difficulty:
+      <select id="difficulty">
+        <option value="0.1">Easy</option>
+        <option value="0.15">Medium</option>
+        <option value="0.25">Hard</option>
+      </select>
+
+      <button id="restart">Restart</button>
+    </div>
+
+    <div class="controls">Time: <span id="timer">0</span></div>
+
+    <div id="game"></div>
+  </div>
+</main>
+
+<script>
+let gridSize, bombChance;
+let grid = [];
+let revealed = [];
+let gameOver = false;
+let started = false;
+let timer = null;
+let time = 0;
+let totalSafe = 0;
+let revealedSafe = 0;
+
+const game = document.getElementById("game");
+const sizeSelect = document.getElementById("size");
+const diffSelect = document.getElementById("difficulty");
+const timerDisplay = document.getElementById("timer");
+const restartBtn = document.getElementById("restart");
+
+restartBtn.onclick = startGame;
+
+function startGame() {
+  clearInterval(timer);
+  timer = null;
+  time = 0;
+  started = false;
+  gameOver = false;
+
+  timerDisplay.textContent = "0";
+
+  gridSize = Number(sizeSelect.value);
+  bombChance = Number(diffSelect.value);
+
+  grid = [];
+  revealed = [];
+  totalSafe = 0;
+  revealedSafe = 0;
+
+  game.innerHTML = "";
+  game.style.gridTemplateColumns = `repeat(${gridSize}, 24px)`;
+
+  for (let i = 0; i < gridSize * gridSize; i++) {
+    if (Math.random() < bombChance) {
+      grid[i] = "B";
+    } else {
+      grid[i] = 0;
+      totalSafe++;
+    }
+    revealed[i] = false;
+  }
+
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] !== "B") grid[i] = countBombs(i);
+  }
+
+  for (let i = 0; i < grid.length; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+
+    cell.oncontextmenu = e => {
+      e.preventDefault();
+      if (revealed[i] || gameOver) return;
+      cell.textContent = cell.textContent === "⚑" ? "" : "⚑";
+      cell.classList.toggle("flag");
+    };
+
+    cell.onclick = () => revealCell(i);
+    game.appendChild(cell);
+  }
+}
+
+function startTimer() {
+  if (started) return;
+  started = true;
+  timer = setInterval(() => {
+    time++;
+    timerDisplay.textContent = time;
+  }, 1000);
+}
+
+function countBombs(i) {
+  let count = 0;
+  for (let y = -1; y <= 1; y++) {
+    for (let x = -1; x <= 1; x++) {
+      const n = i + x + y * gridSize;
+      if (
+        n >= 0 &&
+        n < grid.length &&
+        Math.abs((i % gridSize) - (n % gridSize)) <= 1 &&
+        grid[n] === "B"
+      ) count++;
+    }
+  }
+  return count;
+}
+
+function revealCell(i) {
+  if (gameOver) return;
+  const cell = game.children[i];
+  if (revealed[i] || cell.textContent === "⚑") return;
+
+  startTimer();
+
+  revealed[i] = true;
+  cell.classList.add("revealed");
+
+  if (grid[i] === "B") {
+    gameOver = true;
+    cell.textContent = "💣";
+    cell.classList.add("bomb");
+    clearInterval(timer);
+    revealAllMines();
+    setTimeout(() => alert("Game Over"), 50);
+    return;
+  }
+
+  revealedSafe++;
+
+  if (grid[i] > 0) {
+    cell.textContent = grid[i];
+    cell.classList.add("n" + grid[i]);
+  } else {
+    floodFill(i);
+  }
+
+  checkWin();
+}
+
+function floodFill(i) {
+  for (let y = -1; y <= 1; y++) {
+    for (let x = -1; x <= 1; x++) {
+      const n = i + x + y * gridSize;
+      if (
+        n >= 0 &&
+        n < grid.length &&
+        !revealed[n] &&
+        Math.abs((i % gridSize) - (n % gridSize)) <= 1
+      ) revealCell(n);
+    }
+  }
+}
+
+function revealAllMines() {
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] === "B") {
+      const cell = game.children[i];
+      cell.classList.add("revealed", "bomb");
+      cell.textContent = "💣";
+    }
+  }
+}
+
+function checkWin() {
+  if (revealedSafe === totalSafe) {
+    gameOver = true;
+    clearInterval(timer);
+    setTimeout(() => alert(`You win!\nTime: ${time}s`), 50);
+  }
+}
+
+startGame();
+</script>
+
+</body>
+</html>
